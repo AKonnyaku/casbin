@@ -64,6 +64,10 @@ try:
         if not in_code:
             processed_lines.append(line)
             continue
+
+        if re.match(r'^\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]', line) or re.search(r'need\s*>?=\s*\d+\s+samples', line):
+            processed_lines.append(line)
+            continue
             
         # Processing inside code block
         
@@ -75,14 +79,8 @@ try:
                 is_header = True
         
         if is_header:
-            if 'Delta' not in line and ('vs base' in line or '/op' in line):
-                 line = line.rstrip()
-                 # Try to align Delta header nicely
-                 if len(line) < ALIGN_COLUMN:
-                     line = line + " " * (ALIGN_COLUMN - len(line))
-                 else:
-                     line = line + "   "
-                 line += "Delta"
+            if 'Delta' not in line and 'vs base' in line:
+                line = re.sub(r'(vs base)(\s*)', r'\1  Delta\2', line, count=1)
             processed_lines.append(line)
             continue
             
@@ -139,38 +137,23 @@ try:
             existing_tilde = '~' in line.split()[-1] if line.split() else False
             
             if existing_pct_match:
-                # Align based on the percentage position
-                start_idx = existing_pct_match.start()
-                prefix = line[:start_idx].rstrip()
-                pct_str = existing_pct_match.group(0)
-                suffix = line[existing_pct_match.end():]
-                
-                if len(prefix) < ALIGN_COLUMN:
-                    prefix = prefix + " " * (ALIGN_COLUMN - len(prefix))
+                if re.search(r'(🐌|🚀|➡️)', line):
+                    processed_lines.append(line)
                 else:
-                    prefix = prefix + "   "
-                    
-                new_line = f"{prefix}{pct_str} {icon}{suffix}"
-                processed_lines.append(new_line)
+                    end_idx = existing_pct_match.end()
+                    processed_lines.append(f"{line[:end_idx]} {icon}{line[end_idx:]}")
                 
             elif existing_tilde:
+                 if re.search(r'(🐌|🚀|➡️)', line):
+                     processed_lines.append(line)
+                     continue
                  # Find the tilde
                  tilde_match = re.search(r'\s~\s', line)
                  if not tilde_match:
                      tilde_match = re.search(r'\s~', line) # End of line or before pipe
                      
                  if tilde_match:
-                     start_idx = tilde_match.start()
-                     prefix = line[:start_idx].rstrip()
-                     suffix = line[tilde_match.end():]
-                     
-                     if len(prefix) < ALIGN_COLUMN:
-                        prefix = prefix + " " * (ALIGN_COLUMN - len(prefix))
-                     else:
-                        prefix = prefix + "   "
-                        
-                     new_line = f"{prefix} ~ ➡️{suffix}"
-                     processed_lines.append(new_line)
+                     processed_lines.append(f"{line[:tilde_match.end()]} ➡️{line[tilde_match.end():]}")
                  else:
                      # Fallback if tilde regex fails
                      processed_lines.append(line)
