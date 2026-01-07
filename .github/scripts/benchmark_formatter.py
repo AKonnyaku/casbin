@@ -9,7 +9,8 @@ try:
     lines = p.read_text(encoding="utf-8").splitlines()
     processed_lines = []
     in_code = False
-    delta_col = None  # record "Delta" column start per table
+    delta_col = None  # record "Diff" column start per table
+    header_has_vs_base = False  # ensure benchstat header shows base/pr order
 
     ALIGN_COLUMN = 60  # fallback alignment when header not found
 
@@ -62,6 +63,8 @@ try:
             "B": 1.0,
             "B/op": 1.0,
         }
+        if suffix and suffix not in multipliers:
+            raise ValueError(f"Unexpected unit: {suffix}")
         return val * multipliers.get(suffix, 1.0)
 
     def extract_two_numbers(tokens):
@@ -82,6 +85,7 @@ try:
         if line.strip() == "```":
             in_code = not in_code
             delta_col = None  # reset per code block
+            header_has_vs_base = False
             processed_lines.append(line)
             continue
 
@@ -99,6 +103,8 @@ try:
             if 'Delta' in line:
                 line = line.replace('Delta', 'Diff', 1)
             delta_col = line.find('Diff')
+            if 'vs base' in line:
+                header_has_vs_base = True
             processed_lines.append(line)
             continue
 
@@ -116,6 +122,10 @@ try:
 
         numbers = extract_two_numbers(tokens)
         pct_match = re.search(r'([+-]?\d+\.\d+)%', line)
+
+        # Ensure header conveyed order; otherwise fail fast to avoid sign confusion
+        if not header_has_vs_base:
+            raise ValueError("benchstat header missing 'vs base' — cannot determine base/PR order.")
 
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
