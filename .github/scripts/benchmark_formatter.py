@@ -94,9 +94,11 @@ try:
             processed_lines.append(line)
             continue
 
-        # header lines: capture Delta column
-        if 'Delta' in line and '│' in line:
-            delta_col = line.find('Delta')
+        # header lines: ensure last column labeled Diff and record its column start
+        if '│' in line and ('Delta' in line or 'Diff' in line):
+            if 'Delta' in line:
+                line = line.replace('Delta', 'Diff', 1)
+            delta_col = line.find('Diff')
             processed_lines.append(line)
             continue
 
@@ -126,6 +128,21 @@ try:
             else:
                 left = left + "  "
             processed_lines.append(f"{left}n/a (has zero)")
+            continue
+
+        # when both values are zero, force diff = 0 and align
+        if len(numbers) == 2 and numbers[0] == 0 and numbers[1] == 0:
+            diff_val = 0.0
+            icon = get_icon(diff_val)
+
+            left = line.rstrip()
+            target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            if len(left) < target_col:
+                left = left + " " * (target_col - len(left))
+            else:
+                left = left + "  "
+
+            processed_lines.append(f"{left}{diff_val:+.2f}% {icon}")
             continue
 
         # recompute diff when we have two numeric values
