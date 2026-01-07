@@ -187,7 +187,7 @@ try:
                 # Remove any existing icon after the percentage to avoid duplicates
                 suffix = re.sub(r'\s*(🐌|🚀|➡️)', '', suffix)
 
-            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
+                target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
                 if len(left) < target_col:
                     left = left + " " * (target_col - len(left))
                 else:
