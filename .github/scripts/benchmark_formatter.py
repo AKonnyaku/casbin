@@ -180,14 +180,19 @@ try:
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
         if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)) and not pct_match:
-            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
+            # "null(has zero)⁴" is ~16 chars. Standard diff "+0.00% ➡️" is ~9 chars.
+            # Shift left by 7 chars to align right edge with previous lines and keep it centered/left-extended.
+            shift = 7
+            base_target = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
+            target_col = max(0, base_target - shift)
+
             leading = re.match(r'^\s*', line).group(0)
             left = f"{leading}geomean"
             if len(left) < target_col:
                 left = left + " " * (target_col - len(left))
             else:
                 left = left + "  "
-            processed_lines.append(f"{left}n/a (has zero)")
+            processed_lines.append(f"{left}null(has zero)⁴")
             continue
 
         # when both values are zero, force diff = 0 and align
