@@ -67,8 +67,11 @@ jobs:
           echo '```' >> comparison.md
 
           # Post-process to append percentage + emoji column (🚀 faster < -10%, 🐌 slower > +10%, otherwise ➡️)
+          if [ ! -f comparison.md ]; then
+            echo "comparison.md not found after benchstat." >&2
+            exit 1
+          fi
           python3 .github/scripts/benchmark_formatter.py
-        continue-on-error: true
 
       # Save PR number
       - name: Save PR number
