@@ -115,6 +115,19 @@ try:
         numbers = extract_two_numbers(tokens)
         pct_match = re.search(r'([+-]?\d+\.\d+)%', line)
 
+        # Special handling for geomean when values missing or zero
+        is_geomean = tokens[0] == "geomean"
+        if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)):
+            target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            leading = re.match(r'^\s*', line).group(0)
+            left = f"{leading}geomean"
+            if len(left) < target_col:
+                left = left + " " * (target_col - len(left))
+            else:
+                left = left + "  "
+            processed_lines.append(f"{left}n/a (has zero)")
+            continue
+
         # recompute diff when we have two numeric values
         if len(numbers) == 2 and numbers[0] != 0:
             diff_val = (numbers[1] - numbers[0]) / numbers[0] * 100
