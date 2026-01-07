@@ -97,10 +97,8 @@ try:
             continue
         if not line.strip() or line.strip().startswith(('goos:', 'goarch:', 'pkg:', 'cpu:')):
             continue
+        # Header lines are handled separately in Pass 1
         if '│' in line and ('vs base' in line or 'old' in line or 'new' in line):
-            idx = line.rfind("│")
-            if idx > 0:
-                align_hint = idx + 3
             continue
             
         # It's likely a data line
@@ -116,15 +114,18 @@ try:
         if w > max_content_width:
             max_content_width = w
 
-    # Ensure target column is beyond the longest line
-    # Add some padding
-    max_content_width += 4
+    # Calculate global alignment target for Diff column
+    # Ensure target column is beyond the longest line with some padding
+    diff_col_start = max_content_width + 4
+    
+    # Calculate right boundary (pipe) position
+    # Diff column width ~12 chars (e.g. "+100.00% 🚀")
+    right_boundary = diff_col_start + 14
 
     for line in lines:
+
         if line.strip() == "```":
             in_code = not in_code
-            delta_col = None  # reset per code block
-            align_hint = None
             processed_lines.append(line)
             continue
 
@@ -137,29 +138,39 @@ try:
             processed_lines.append(line)
             continue
 
-        # header lines: ensure last column labeled Diff and record its column start
+        # header lines: ensure last column labeled Diff and force alignment
         if '│' in line and ('vs base' in line or 'old' in line or 'new' in line):
-            # If Delta/Diff column is missing, try to inject it to help alignment
-            if not (re.search(r'\bdelta\b', line, re.IGNORECASE) or 'Diff' in line):
-                if 'vs base' in line:
-                    # Inject Diff after vs base with some spacing to align with data column
-                    line = line.replace('vs base', 'vs base       Diff', 1)
+            # Strip trailing pipe and whitespace
+            stripped_header = line.rstrip().rstrip('│').rstrip()
             
-            if re.search(r'\bdelta\b', line, re.IGNORECASE):
-                line = re.sub(r'\b[Dd]elta\b', 'Diff', line, count=1)
-                
-            # update align_hint from this header
-            idx = line.rfind("│")
-            if idx > 0:
-                align_hint = max(align_hint or 0, idx + 3)
-                
-            # find column start
-            d_idx = line.find('Diff')
-            if d_idx < 0:
-                d_idx = line.lower().find('delta')
-            delta_col = d_idx if d_idx >= 0 else None
+            # If "vs base" is present, ensure we don't duplicate "Diff" if it's already there
+            # But we want to enforce OUR alignment, so we might strip existing Diff
+            stripped_header = re.sub(r'\s+Diff\s*$', '', stripped_header, flags=re.IGNORECASE)
+            stripped_header = re.sub(r'\s+Delta\b', '', stripped_header, flags=re.IGNORECASE)
+
+            # Pad to diff_col_start
+            padding = diff_col_start - len(stripped_header)
+            if padding < 2: 
+                padding = 2 # minimum spacing
+                # If header is wider than data (unlikely but possible), adjust diff_col_start
+                # But for now let's trust max_content_width or just append
             
-            processed_lines.append(line)
+            if len(stripped_header) < diff_col_start:
+                new_header = stripped_header + " " * (diff_col_start - len(stripped_header))
+            else:
+                new_header = stripped_header + "  "
+
+            # Add Diff column header if it's the second header row (vs base)
+            if 'vs base' in line:
+                new_header += "Diff"
+            
+            # Add closing pipe at the right boundary
+            current_len = len(new_header)
+            if current_len < right_boundary:
+                new_header += " " * (right_boundary - current_len)
+            
+            new_header += "│"
+            processed_lines.append(new_header)
             continue
 
         # non-data meta lines
@@ -177,47 +188,34 @@ try:
         numbers = extract_two_numbers(tokens)
         pct_match = re.search(r'([+-]?\d+\.\d+)%', line)
 
+        # Helper to align and append
+        def append_aligned(left_part, content):
+            if len(left_part) < diff_col_start:
+                aligned = left_part + " " * (diff_col_start - len(left_part))
+            else:
+                aligned = left_part + "  "
+            
+            # Ensure content doesn't exceed right boundary (visual check only, we don't truncate)
+            # But users asked not to exceed header pipe.
+            # Header pipe is at right_boundary.
+            # Content starts at diff_col_start.
+            # So content length should be <= right_boundary - diff_col_start
+            return f"{aligned}{content}"
+
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
-        
-        # Check for invalid geomean conditions:
-        # 1. Not enough numbers
-        # 2. Base value is 0 (but not both 0, which is handled as 0% diff later)
-        is_invalid_geomean = False
-        if len(numbers) < 2:
-            is_invalid_geomean = True
-        elif len(numbers) >= 2 and numbers[0] == 0 and numbers[1] != 0:
-            is_invalid_geomean = True
-
-        if is_geomean and is_invalid_geomean:
-            # "null(has zero)⁴" is ~16 chars. Standard diff "+0.00% ➡️" is ~9 chars.
-            # Shift left by 6 chars to align right edge with previous lines.
-            shift = 6
-            base_target = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
-            target_col = max(0, base_target - shift)
-
+        if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)) and not pct_match:
             leading = re.match(r'^\s*', line).group(0)
             left = f"{leading}geomean"
-            if len(left) < target_col:
-                left = left + " " * (target_col - len(left))
-            else:
-                left = left + "  "
-            processed_lines.append(f"{left}null(has zero)⁴")
+            processed_lines.append(append_aligned(left, "n/a (has zero)"))
             continue
 
         # when both values are zero, force diff = 0 and align
         if len(numbers) == 2 and numbers[0] == 0 and numbers[1] == 0:
             diff_val = 0.0
             icon = get_icon(diff_val)
-
             left = line.rstrip()
-            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
-            if len(left) < target_col:
-                left = left + " " * (target_col - len(left))
-            else:
-                left = left + "  "
-
-            processed_lines.append(f"{left}{diff_val:+.2f}% {icon}")
+            processed_lines.append(append_aligned(left, f"{diff_val:+.2f}% {icon}"))
             continue
 
         # recompute diff when we have two numeric values
@@ -231,13 +229,7 @@ try:
             else:
                 left = line.rstrip()
 
-            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
-            if len(left) < target_col:
-                left = left + " " * (target_col - len(left))
-            else:
-                left = left + "  "
-
-            processed_lines.append(f"{left}{diff_val:+.2f}% {icon}")
+            processed_lines.append(append_aligned(left, f"{diff_val:+.2f}% {icon}"))
             continue
 
         # fallback: align existing percentage to Diff column and (re)append icon
@@ -251,13 +243,7 @@ try:
                 # Remove any existing icon after the percentage to avoid duplicates
                 suffix = re.sub(r'\s*(🐌|🚀|➡️)', '', suffix)
 
-                target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
-                if len(left) < target_col:
-                    left = left + " " * (target_col - len(left))
-                else:
-                    left = left + "  "
-
-                processed_lines.append(f"{left}{pct_val:+.2f}% {icon}{suffix}")
+                processed_lines.append(append_aligned(left, f"{pct_val:+.2f}% {icon}{suffix}"))
             except ValueError:
                 processed_lines.append(line)
             continue
