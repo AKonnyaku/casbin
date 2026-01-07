@@ -10,6 +10,7 @@ try:
     processed_lines = []
     in_code = False
     delta_col = None  # record "Diff" column start per table
+    align_hint = None  # derived from benchstat header last pipe position
 
     ALIGN_COLUMN = 60  # fallback alignment when header not found
 
@@ -80,6 +81,14 @@ try:
                     break
         return found
 
+    # Pass 0: find a header line with pipes to derive alignment hint (similar思路 to performance-pr (1).yml)
+    for hline in lines:
+        if "│" in hline and ("vs base" in hline or "old" in hline or "new" in hline):
+            idx = hline.rfind("│")
+            if idx > 0:
+                align_hint = idx + 3  # a few spaces after the last pipe
+                break
+
     for line in lines:
         if line.strip() == "```":
             in_code = not in_code
@@ -138,7 +147,7 @@ try:
             icon = get_icon(diff_val)
 
             left = line.rstrip()
-            target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
             if len(left) < target_col:
                 left = left + " " * (target_col - len(left))
             else:
@@ -158,7 +167,7 @@ try:
             else:
                 left = line.rstrip()
 
-            target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
             if len(left) < target_col:
                 left = left + " " * (target_col - len(left))
             else:
@@ -178,7 +187,7 @@ try:
                 # Remove any existing icon after the percentage to avoid duplicates
                 suffix = re.sub(r'\s*(🐌|🚀|➡️)', '', suffix)
 
-                target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
                 if len(left) < target_col:
                     left = left + " " * (target_col - len(left))
                 else:
