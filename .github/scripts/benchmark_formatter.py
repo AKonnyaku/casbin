@@ -62,9 +62,8 @@ try:
             "Ti": 1024.0**4,
             "B": 1.0,
             "B/op": 1.0,
+            "C": 1.0,  # tolerate degree/unit markers that don't affect ratio
         }
-        if suffix and suffix not in multipliers:
-            raise ValueError(f"Unexpected unit: {suffix}")
         return val * multipliers.get(suffix, 1.0)
 
     def extract_two_numbers(tokens):
@@ -93,6 +92,7 @@ try:
         if line.strip() == "```":
             in_code = not in_code
             delta_col = None  # reset per code block
+            align_hint = None
             processed_lines.append(line)
             continue
 
@@ -106,10 +106,18 @@ try:
             continue
 
         # header lines: ensure last column labeled Diff and record its column start
-        if '│' in line and ('Delta' in line or 'Diff' in line):
-            if 'Delta' in line:
-                line = line.replace('Delta', 'Diff', 1)
-            delta_col = line.find('Diff')
+        if '│' in line and (re.search(r'\bdelta\b', line, re.IGNORECASE) or 'Diff' in line):
+            if re.search(r'\bdelta\b', line, re.IGNORECASE):
+                line = re.sub(r'\b[Dd]elta\b', 'Diff', line, count=1)
+            # update align_hint from this header
+            idx = line.rfind("│")
+            if idx > 0:
+                align_hint = max(align_hint or 0, idx + 3)
+            # find column start
+            d_idx = line.find('Diff')
+            if d_idx < 0:
+                d_idx = line.lower().find('delta')
+            delta_col = d_idx if d_idx >= 0 else None
             processed_lines.append(line)
             continue
 
