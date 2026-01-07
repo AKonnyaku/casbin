@@ -165,16 +165,26 @@ try:
             processed_lines.append(f"{left}{diff_val:+.2f}% {icon}")
             continue
 
-        # fallback: attach icon to existing percentage only
+        # fallback: align existing percentage to Diff column and (re)append icon
         if pct_match:
             try:
                 pct_val = float(pct_match.group(1))
                 icon = get_icon(pct_val)
-                if not re.search(r'(🐌|🚀|➡️)', line[pct_match.end():]):
-                    line = f"{line[:pct_match.end()]} {icon}{line[pct_match.end():]}"
+
+                left = line[:pct_match.start()].rstrip()
+                suffix = line[pct_match.end():]
+                # Remove any existing icon after the percentage to avoid duplicates
+                suffix = re.sub(r'\s*(🐌|🚀|➡️)', '', suffix)
+
+                target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+                if len(left) < target_col:
+                    left = left + " " * (target_col - len(left))
+                else:
+                    left = left + "  "
+
+                processed_lines.append(f"{left}{pct_val:+.2f}% {icon}{suffix}")
             except ValueError:
-                pass
-            processed_lines.append(line)
+                processed_lines.append(line)
             continue
 
         # If we cannot parse numbers or percentages, keep the original (only worker suffix stripped)
