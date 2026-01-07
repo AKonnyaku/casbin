@@ -31,8 +31,9 @@ try:
         if not s: return None
         
         # Regex for number + suffix
-        # Handle cases like "100" (no suffix) or "100B" (B suffix)
-        m = re.match(r'^([-+]?\d*\.?\d+)([a-zA-Zµ]*)', s)
+        # STRICTLY match ASCII digits only [0-9] to avoid matching '⁴' etc.
+        # \d in Python 3 matches unicode digits, so we use [0-9]
+        m = re.match(r'^([-+]?[0-9]*\.?[0-9]+)([a-zA-Zµ]*)', s)
         if not m: return None
         
         try:
@@ -47,6 +48,7 @@ try:
             'm': 1e-3, 'ms': 1e-3,
             's': 1,
             'k': 1e3, 'M': 1e6, 'G': 1e9,
+            'Ki': 1024, 'Mi': 1024**2, 'Gi': 1024**3,
             # B is bytes, count as 1 unit
             'B': 1, 
         }
@@ -64,13 +66,16 @@ try:
         if not in_code:
             processed_lines.append(line)
             continue
-
-        if re.match(r'^\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]', line) or re.search(r'need\s*>?=\s*\d+\s+samples', line):
-            processed_lines.append(line)
-            continue
             
         # Processing inside code block
         
+        # SKIP Footnotes
+        # Lines starting with superscript numbers ¹²³⁴
+        # Or lines containing "need >= X samples"
+        if re.match(r'^\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]', line):
+            processed_lines.append(line)
+            continue
+            
         # 1. Identify Headers STRICTLY
         # Headers must contain specific keywords
         is_header = False
@@ -80,19 +85,25 @@ try:
         
         if is_header:
             if 'Delta' not in line and 'vs base' in line:
-                line = re.sub(r'(vs base)(\s*)', r'\1  Delta\2', line, count=1)
+                 # Attempt to insert Delta column header nicely
+                 # We want to align it with the data columns if possible
+                 # But benchstat headers are usually aligned by spaces
+                 line = line.rstrip()
+                 # Simply append Delta at the end for now, or pad
+                 if len(line) < ALIGN_COLUMN:
+                     line = line + " " * (ALIGN_COLUMN - len(line))
+                 else:
+                     line = line + "   "
+                 line += "Delta"
             processed_lines.append(line)
             continue
             
         # 2. Identify Data Rows
-        if not line.strip() or line.strip().startswith(('goos:', 'goarch:', 'pkg:')):
+        if not line.strip() or line.strip().startswith(('goos:', 'goarch:', 'pkg:', 'cpu:')):
             processed_lines.append(line)
             continue
 
         # Try to parse columns
-        # Treat '│' as a delimiter that we might need to skip or handle
-        # But parse_val will handle it (return None)
-        
         tokens = line.split()
         if not tokens:
             processed_lines.append(line)
@@ -109,7 +120,6 @@ try:
             line = strip_worker_suffix(line)
             
         # Extract values
-        vals = []
         parsed_vals = []
         
         # We look for the first two valid numbers
@@ -137,9 +147,12 @@ try:
             existing_tilde = '~' in line.split()[-1] if line.split() else False
             
             if existing_pct_match:
+                # Check if icon already exists to avoid duplication
                 if re.search(r'(🐌|🚀|➡️)', line):
                     processed_lines.append(line)
                 else:
+                    # In-place insertion: append icon after the percentage
+                    # This preserves original alignment from benchstat
                     end_idx = existing_pct_match.end()
                     processed_lines.append(f"{line[:end_idx]} {icon}{line[end_idx:]}")
                 
@@ -153,7 +166,9 @@ try:
                      tilde_match = re.search(r'\s~', line) # End of line or before pipe
                      
                  if tilde_match:
-                     processed_lines.append(f"{line[:tilde_match.end()]} ➡️{line[tilde_match.end():]}")
+                     # In-place insertion: append icon after tilde
+                     end_idx = tilde_match.end()
+                     processed_lines.append(f"{line[:end_idx]} ➡️{line[end_idx:]}")
                  else:
                      # Fallback if tilde regex fails
                      processed_lines.append(line)
@@ -161,17 +176,14 @@ try:
             else:
                 # No percentage, no tilde. Append our own.
                 line = line.rstrip()
-                # If there is a trailing pipe '│', we should probably insert BEFORE it?
-                # But benchstat output with pipes usually has values inside.
-                # If we are here, it means no percentage was found.
                 
                 # Check for trailing pipe
+                suffix = ""
                 if line.endswith('│'):
                     line = line[:-1].rstrip()
                     suffix = " │"
-                else:
-                    suffix = ""
                 
+                # Use strict alignment only when appending NEW column
                 if len(line) < ALIGN_COLUMN:
                     line = line + " " * (ALIGN_COLUMN - len(line))
                 else:
@@ -181,6 +193,7 @@ try:
                 processed_lines.append(new_line)
         else:
             # Couldn't parse 2 values
+            # This handles cases like "geomean ⁴ ⁴" where values are missing
             processed_lines.append(line)
 
     p.write_text("\n".join(processed_lines) + "\n", encoding="utf-8")
