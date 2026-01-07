@@ -106,18 +106,27 @@ try:
             continue
 
         # header lines: ensure last column labeled Diff and record its column start
-        if '│' in line and (re.search(r'\bdelta\b', line, re.IGNORECASE) or 'Diff' in line):
+        if '│' in line and ('vs base' in line or 'old' in line or 'new' in line):
+            # If Delta/Diff column is missing, try to inject it to help alignment
+            if not (re.search(r'\bdelta\b', line, re.IGNORECASE) or 'Diff' in line):
+                if 'vs base' in line:
+                    # Inject Diff after vs base with some spacing to align with data column
+                    line = line.replace('vs base', 'vs base       Diff', 1)
+            
             if re.search(r'\bdelta\b', line, re.IGNORECASE):
                 line = re.sub(r'\b[Dd]elta\b', 'Diff', line, count=1)
+                
             # update align_hint from this header
             idx = line.rfind("│")
             if idx > 0:
                 align_hint = max(align_hint or 0, idx + 3)
+                
             # find column start
             d_idx = line.find('Diff')
             if d_idx < 0:
                 d_idx = line.lower().find('delta')
             delta_col = d_idx if d_idx >= 0 else None
+            
             processed_lines.append(line)
             continue
 
@@ -138,7 +147,7 @@ try:
 
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
-        if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)):
+        if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)) and not pct_match:
             target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
             leading = re.match(r'^\s*', line).group(0)
             left = f"{leading}geomean"
