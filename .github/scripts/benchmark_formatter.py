@@ -187,7 +187,7 @@ try:
                 left = left + " " * (target_col - len(left))
             else:
                 left = left + "  "
-            processed_lines.append(f"{left}n/a (has zero) ⁴")
+            processed_lines.append(f"{left}n/a (has zero)")
             continue
 
         # when both values are zero, force diff = 0 and align
