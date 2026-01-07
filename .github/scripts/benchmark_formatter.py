@@ -179,10 +179,20 @@ try:
 
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
-        if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)) and not pct_match:
+        
+        # Check for invalid geomean conditions:
+        # 1. Not enough numbers
+        # 2. Base value is 0 (but not both 0, which is handled as 0% diff later)
+        is_invalid_geomean = False
+        if len(numbers) < 2:
+            is_invalid_geomean = True
+        elif len(numbers) >= 2 and numbers[0] == 0 and numbers[1] != 0:
+            is_invalid_geomean = True
+
+        if is_geomean and is_invalid_geomean:
             # "null(has zero)⁴" is ~16 chars. Standard diff "+0.00% ➡️" is ~9 chars.
-            # Shift left by 7 chars to align right edge with previous lines and keep it centered/left-extended.
-            shift = 7
+            # Shift left by 6 chars to align right edge with previous lines.
+            shift = 6
             base_target = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN, max_content_width)
             target_col = max(0, base_target - shift)
 
