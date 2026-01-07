@@ -1,4 +1,3 @@
-
 import pathlib, re, sys
 
 try:
@@ -16,24 +15,30 @@ try:
     
     def strip_worker_suffix(text: str) -> str:
         # Removes -8, -4 suffixes from test names
-        return re.sub(r'^(\S+?)-\d+(\s+)', r'\1\2', text)
+        # Matches "Name-8 " -> "Name "
+        return re.sub(r'(\S+?)-\d+(\s|$)', r'\1\2', text)
 
     def get_icon(diff_val):
         if diff_val > 10: return "🐌"
         if diff_val < -10: return "🚀"
         return "➡️"
 
+    def clean_superscripts(text):
+        return re.sub(r'[¹²³⁴⁵⁶⁷⁸⁹⁰]', '', text)
+
     def parse_val(s):
         # Parses benchstat numbers like "1.23k", "100ns", "0.005"
         # Returns float value or None
+        if '%' in s: return None
+        
+        s = clean_superscripts(s)
         s = s.split('±')[0].strip()
         s = s.split('(')[0].strip()
         if not s: return None
         
         # Regex for number + suffix
-        # STRICTLY match ASCII digits only [0-9] to avoid matching '⁴' etc.
-        # \d in Python 3 matches unicode digits, so we use [0-9]
-        m = re.match(r'^([-+]?[0-9]*\.?[0-9]+)([a-zA-Zµ]*)', s)
+        # Handle cases like "100" (no suffix) or "100B" (B suffix)
+        m = re.match(r'^([-+]?\d*\.?\d+)([a-zA-Zµ]*)', s)
         if not m: return None
         
         try:
@@ -48,7 +53,6 @@ try:
             'm': 1e-3, 'ms': 1e-3,
             's': 1,
             'k': 1e3, 'M': 1e6, 'G': 1e9,
-            'Ki': 1024, 'Mi': 1024**2, 'Gi': 1024**3,
             # B is bytes, count as 1 unit
             'B': 1, 
         }
@@ -66,16 +70,15 @@ try:
         if not in_code:
             processed_lines.append(line)
             continue
-            
-        # Processing inside code block
-        
-        # SKIP Footnotes
-        # Lines starting with superscript numbers ¹²³⁴
-        # Or lines containing "need >= X samples"
-        if re.match(r'^\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]', line):
+
+        # Skip footnote lines and "need samples" lines
+        # Check for footnote markers at start of line
+        if re.match(r'^\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]', line) or re.search(r'need\s*>?=\s*\d+\s+samples', line):
             processed_lines.append(line)
             continue
             
+        # Processing inside code block
+        
         # 1. Identify Headers STRICTLY
         # Headers must contain specific keywords
         is_header = False
@@ -85,25 +88,15 @@ try:
         
         if is_header:
             if 'Delta' not in line and 'vs base' in line:
-                 # Attempt to insert Delta column header nicely
-                 # We want to align it with the data columns if possible
-                 # But benchstat headers are usually aligned by spaces
-                 line = line.rstrip()
-                 # Simply append Delta at the end for now, or pad
-                 if len(line) < ALIGN_COLUMN:
-                     line = line + " " * (ALIGN_COLUMN - len(line))
-                 else:
-                     line = line + "   "
-                 line += "Delta"
+                line = re.sub(r'(vs base)(\s*)', r'\1  Delta\2', line, count=1)
             processed_lines.append(line)
             continue
             
         # 2. Identify Data Rows
-        if not line.strip() or line.strip().startswith(('goos:', 'goarch:', 'pkg:', 'cpu:')):
+        if not line.strip() or line.strip().startswith(('goos:', 'goarch:', 'pkg:')):
             processed_lines.append(line)
             continue
 
-        # Try to parse columns
         tokens = line.split()
         if not tokens:
             processed_lines.append(line)
@@ -120,6 +113,7 @@ try:
             line = strip_worker_suffix(line)
             
         # Extract values
+        vals = []
         parsed_vals = []
         
         # We look for the first two valid numbers
@@ -147,12 +141,9 @@ try:
             existing_tilde = '~' in line.split()[-1] if line.split() else False
             
             if existing_pct_match:
-                # Check if icon already exists to avoid duplication
                 if re.search(r'(🐌|🚀|➡️)', line):
                     processed_lines.append(line)
                 else:
-                    # In-place insertion: append icon after the percentage
-                    # This preserves original alignment from benchstat
                     end_idx = existing_pct_match.end()
                     processed_lines.append(f"{line[:end_idx]} {icon}{line[end_idx:]}")
                 
@@ -166,9 +157,7 @@ try:
                      tilde_match = re.search(r'\s~', line) # End of line or before pipe
                      
                  if tilde_match:
-                     # In-place insertion: append icon after tilde
-                     end_idx = tilde_match.end()
-                     processed_lines.append(f"{line[:end_idx]} ➡️{line[end_idx:]}")
+                     processed_lines.append(f"{line[:tilde_match.end()]} ➡️{line[tilde_match.end():]}")
                  else:
                      # Fallback if tilde regex fails
                      processed_lines.append(line)
@@ -178,12 +167,12 @@ try:
                 line = line.rstrip()
                 
                 # Check for trailing pipe
-                suffix = ""
                 if line.endswith('│'):
                     line = line[:-1].rstrip()
                     suffix = " │"
+                else:
+                    suffix = ""
                 
-                # Use strict alignment only when appending NEW column
                 if len(line) < ALIGN_COLUMN:
                     line = line + " " * (ALIGN_COLUMN - len(line))
                 else:
@@ -192,9 +181,25 @@ try:
                 new_line = f"{line}{diff:+.2f}% {icon}{suffix}"
                 processed_lines.append(new_line)
         else:
-            # Couldn't parse 2 values
-            # This handles cases like "geomean ⁴ ⁴" where values are missing
-            processed_lines.append(line)
+            # Couldn't parse 2 values.
+            # But maybe there is a percentage already (e.g. geomean with missing values)
+            existing_pct_match = re.search(r'([+-]?\d+\.\d+)%', line)
+            if existing_pct_match:
+                # Check if icon already exists
+                if not re.search(r'(🐌|🚀|➡️)', line):
+                    # We can't calculate diff, but we can append icon based on parsed percentage?
+                    # Parse the percentage string to get diff value
+                    try:
+                        pct_val = float(existing_pct_match.group(1))
+                        icon = get_icon(pct_val)
+                        end_idx = existing_pct_match.end()
+                        processed_lines.append(f"{line[:end_idx]} {icon}{line[end_idx:]}")
+                    except ValueError:
+                        processed_lines.append(line)
+                else:
+                    processed_lines.append(line)
+            else:
+                processed_lines.append(line)
 
     p.write_text("\n".join(processed_lines) + "\n", encoding="utf-8")
     
