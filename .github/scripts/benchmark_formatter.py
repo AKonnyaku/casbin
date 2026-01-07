@@ -139,7 +139,7 @@ try:
         # Special handling for geomean when values missing or zero
         is_geomean = tokens[0] == "geomean"
         if is_geomean and (len(numbers) < 2 or any(v == 0 for v in numbers)):
-            target_col = delta_col if delta_col is not None else ALIGN_COLUMN
+            target_col = max(delta_col or 0, align_hint or 0, ALIGN_COLUMN)
             leading = re.match(r'^\s*', line).group(0)
             left = f"{leading}geomean"
             if len(left) < target_col:
