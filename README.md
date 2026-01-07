@@ -1,6 +1,8 @@
 Casbin
 ====
 
+<!-- Trigger Benchmark CI 02 -->
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/casbin/casbin)](https://goreportcard.com/report/github.com/casbin/casbin)
 [![Build](https://github.com/casbin/casbin/actions/workflows/default.yml/badge.svg)](https://github.com/casbin/casbin/actions/workflows/default.yml)
 [![Coverage Status](https://coveralls.io/repos/github/casbin/casbin/badge.svg?branch=master)](https://coveralls.io/github/casbin/casbin?branch=master)
