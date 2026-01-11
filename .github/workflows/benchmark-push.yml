@@ -25,7 +25,7 @@ jobs:
       - name: Checkout Data Repo
         uses: actions/checkout@v4
         with:
-          repository: AKonnyaku/casbin-benchmark-data
+          repository: casbin/casbin-benchmark-data
           token: ${{ secrets.CASBIN_BENCHMARK_DATA_TOKEN }}
           path: benchmark-data
 
