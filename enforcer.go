@@ -57,9 +57,6 @@ type Enforcer struct {
 	autoNotifyDispatcher bool
 	acceptJsonRequest    bool
 
-	policyEffectsPool  sync.Pool
-	matcherResultsPool sync.Pool
-
 	aiConfig AIConfig
 }
 
@@ -190,8 +187,6 @@ func (e *Enforcer) initialize() {
 	e.eft = effector.NewDefaultEffector()
 	e.watcher = nil
 	e.matcherMap = sync.Map{}
-	e.policyEffectsPool = sync.Pool{New: func() interface{} { return &policyEffectsBuffer{values: make([]effector.Effect, 0)} }}
-	e.matcherResultsPool = sync.Pool{New: func() interface{} { return &matcherResultsBuffer{values: make([]float64, 0)} }}
 
 	e.enabled = true
 	e.autoSave = true
@@ -692,8 +687,11 @@ type matcherResultsBuffer struct {
 	values []float64
 }
 
+var globalPolicyEffectsPool = sync.Pool{New: func() interface{} { return &policyEffectsBuffer{values: make([]effector.Effect, 0)} }}
+var globalMatcherResultsPool = sync.Pool{New: func() interface{} { return &matcherResultsBuffer{values: make([]float64, 0)} }}
+
 func (e *Enforcer) getPolicyEffectsBuffer(size int) ([]effector.Effect, *policyEffectsBuffer) {
-	buffer := e.policyEffectsPool.Get().(*policyEffectsBuffer)
+	buffer := globalPolicyEffectsPool.Get().(*policyEffectsBuffer)
 	if cap(buffer.values) < size {
 		buffer.values = make([]effector.Effect, size)
 	} else {
@@ -704,11 +702,11 @@ func (e *Enforcer) getPolicyEffectsBuffer(size int) ([]effector.Effect, *policyE
 
 func (e *Enforcer) putPolicyEffectsBuffer(buffer *policyEffectsBuffer) {
 	buffer.values = buffer.values[:0]
-	e.policyEffectsPool.Put(buffer)
+	globalPolicyEffectsPool.Put(buffer)
 }
 
 func (e *Enforcer) getMatcherResultsBuffer(size int) ([]float64, *matcherResultsBuffer) {
-	buffer := e.matcherResultsPool.Get().(*matcherResultsBuffer)
+	buffer := globalMatcherResultsPool.Get().(*matcherResultsBuffer)
 	if cap(buffer.values) < size {
 		buffer.values = make([]float64, size)
 	} else {
@@ -719,7 +717,7 @@ func (e *Enforcer) getMatcherResultsBuffer(size int) ([]float64, *matcherResults
 
 func (e *Enforcer) putMatcherResultsBuffer(buffer *matcherResultsBuffer) {
 	buffer.values = buffer.values[:0]
-	e.matcherResultsPool.Put(buffer)
+	globalMatcherResultsPool.Put(buffer)
 }
 
 // enforce use a custom matcher to decides whether a "subject" can access a "object" with the operation "action", input parameters are usually: (matcher, sub, obj, act), use model matcher by default when matcher is "".
