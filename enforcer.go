@@ -849,6 +849,9 @@ func (e *Enforcer) enforce(matcher string, explains *[]string, rvals ...interfac
 		for i := range matcherResults {
 			matcherResults[i] = 0
 		}
+		for i := range policyEffects {
+			policyEffects[i] = 0
+		}
 
 		for policyIndex, pvals := range e.model["p"][pType].Policy {
 			// log.LogPrint("Policy Rule: ", pvals)
