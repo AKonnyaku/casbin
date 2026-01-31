@@ -137,7 +137,7 @@ func KeyGetFunc(args ...interface{}) (interface{}, error) {
 // KeyMatch2 determines whether key1 matches the pattern of key2 (similar to RESTful path), key2 can contain a *.
 // For example, "/foo/bar" matches "/foo/*", "/resource1" matches "/:resource".
 func KeyMatch2(key1 string, key2 string) bool {
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 
@@ -162,7 +162,7 @@ func KeyMatch2Func(args ...interface{}) (interface{}, error) {
 // For example, "/resource1" matches "/:resource"
 // if the pathVar == "resource", then "resource1" will be returned.
 func KeyGet2(key1, key2 string, pathVar string) string {
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 	keys := keyGet2Re1.FindAllString(key2, -1)
@@ -198,7 +198,7 @@ func KeyGet2Func(args ...interface{}) (interface{}, error) {
 // KeyMatch3 determines whether key1 matches the pattern of key2 (similar to RESTful path), key2 can contain a *.
 // For example, "/foo/bar" matches "/foo/*", "/resource1" matches "/{resource}".
 func KeyMatch3(key1 string, key2 string) bool {
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 	key2 = keyMatch3Re.ReplaceAllString(key2, "$1[^/]+$2")
@@ -222,7 +222,7 @@ func KeyMatch3Func(args ...interface{}) (interface{}, error) {
 // For example, "project/proj_project1_admin/" matches "project/proj_{project}_admin/"
 // if the pathVar == "project", then "project1" will be returned.
 func KeyGet3(key1, key2 string, pathVar string) string {
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 
@@ -261,7 +261,7 @@ func KeyGet3Func(args ...interface{}) (interface{}, error) {
 // "/parent/123/child/456" does not match "/parent/{id}/child/{id}"
 // But KeyMatch3 will match both.
 func KeyMatch4(key1 string, key2 string) bool {
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 
@@ -322,7 +322,7 @@ func KeyMatch5(key1 string, key2 string) bool {
 		key1 = key1[:i]
 	}
 
-	if strings.Contains(key2, "/*") { //nolint:gosimple
+	if strings.Contains(key2, "/*") { //nolint:gosimple // optimization
 		key2 = strings.Replace(key2, "/*", "/.*", -1)
 	}
 	key2 = keyMatch5Re.ReplaceAllString(key2, "$1[^/]+$2")
